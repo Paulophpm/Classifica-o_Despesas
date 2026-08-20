@@ -30,9 +30,8 @@ import pandas as pd
 
 from config import REGRAS_PALAVRA_CHAVE
 
-# ---------------------------------------------------------------------------
 # Configuração de caminhos
-# ---------------------------------------------------------------------------
+
 CAMINHO_RAZAO = "data/razao.xlsx"
 ABA_RAZAO = "2026"
 CAMINHO_BASE = "data/Transacoes_base.xlsx"
@@ -48,11 +47,10 @@ ATIVIDADE_INFERIDA_PALAVRA_CHAVE = "Classificação inferida | palavra-chave"
 ATIVIDADE_INFERIDA_NAO_ENCONTRADO = "Classificação inferida | não encontrado"
 
 
-# ---------------------------------------------------------------------------
 # Limpeza de texto
-# ---------------------------------------------------------------------------
+
 def limpa_texto(text):
-    """Remove acentos, números e caracteres especiais; retorna texto em maiúsculas."""
+    "Remove acentos, números e caracteres especiais; retorna texto em maiúsculas."
     if pd.isna(text):
         return text
     text = str(text)
@@ -64,9 +62,27 @@ def limpa_texto(text):
     return text.upper()
 
 
-# ---------------------------------------------------------------------------
-# PROCV (merge) razão x base de referência
-# ---------------------------------------------------------------------------
+
+# PROCV (merge)
+
+def _normaliza_nome_coluna(nome):
+    """Remove espaços nas pontas para comparar nomes de coluna com mais tolerância."""
+    return str(nome).strip()
+
+
+def _encontra_coluna(df, nome_esperado):
+    """
+    Localiza a coluna `nome_esperado` em `df` tolerando espaços extras nas
+    pontas e diferenças de maiúsculas/minúsculas. Retorna o nome EXATO da
+    coluna como está em `df`, ou None se não encontrar.
+    """
+    alvo = _normaliza_nome_coluna(nome_esperado).lower()
+    for coluna in df.columns:
+        if _normaliza_nome_coluna(coluna).lower() == alvo:
+            return coluna
+    return None
+
+
 def preenche_manutencao_procv(
     razao,
     base,
@@ -85,9 +101,21 @@ def preenche_manutencao_procv(
     """
     base_copy = base.copy()
 
-    for coluna in (base_trans_col, manut_col, atividade_col):
-        if coluna not in base_copy.columns:
-            raise KeyError(f"Coluna não encontrada em base: {coluna}")
+    # localiza as colunas tolerando espaço extra / maiúscula-minúscula, e já
+    # troca para o nome exato encontrado em base_copy
+    colunas_encontradas = {}
+    for nome_esperado in (base_trans_col, manut_col, atividade_col):
+        encontrada = _encontra_coluna(base_copy, nome_esperado)
+        if encontrada is None:
+            raise KeyError(
+                f"Coluna '{nome_esperado}' não encontrada em base. "
+                f"Colunas disponíveis: {list(base_copy.columns)}"
+            )
+        colunas_encontradas[nome_esperado] = encontrada
+
+    base_trans_col = colunas_encontradas[base_trans_col]
+    manut_col = colunas_encontradas[manut_col]
+    atividade_col = colunas_encontradas[atividade_col]
 
     base_copy[base_trans_col] = base_copy[base_trans_col].astype(str).apply(limpa_texto)
 
@@ -120,9 +148,8 @@ def preenche_manutencao_procv(
     return resultado
 
 
-# ---------------------------------------------------------------------------
 # Classificação por palavra-chave
-# ---------------------------------------------------------------------------
+
 def classifica_por_palavra_chave(
     razao,
     regras=REGRAS_PALAVRA_CHAVE,
@@ -189,10 +216,8 @@ def preenche_atividade_fallback(
 
     return resultado
 
-
-# ---------------------------------------------------------------------------
 # Resumo mensal
-# ---------------------------------------------------------------------------
+
 def gera_resumo_mensal(razao):
     resumo = (
         razao.groupby("MES")
@@ -224,10 +249,8 @@ def gera_resumo_mensal(razao):
 
     return resumo, percentual
 
-
-# ---------------------------------------------------------------------------
 # Fluxo principal
-# ---------------------------------------------------------------------------
+
 def main():
     razao = pd.read_excel(CAMINHO_RAZAO, sheet_name=ABA_RAZAO)
     base = pd.read_excel(CAMINHO_BASE)
