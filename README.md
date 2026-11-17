@@ -1,93 +1,118 @@
-# Classificação de Manutenção x Não Manutenção — Frota
+# Classificação de Naturezas Logísticas — Razão de Despesas
 
-Script em Python que classifica lançamentos do razão contábil (contas de
-**Serviços para Logística e Frota**, **Peças e Acessórios** e **Peças e
-Acessórios para Logística e Frota**) em **Manutenção** ou **Não Manutenção**,
-combinando um cruzamento (PROCV) contra uma base de referência com regras de
-palavra-chave configuráveis.
+Classifica cada lançamento das contas logísticas do razão em uma **categoria**
+(Peças, Pneus, Mão de obra terceirizada, Combustível, Frete, Pedágio...) e
+compara o **grupo esperado** dessa categoria com o **grupo atual** (a conta
+onde o lançamento caiu). Assim a análise mensal responde:
 
-Hoje o script classifica automaticamente cerca de **80% das transações**; o
-restante costuma ser lançamentos em nome de pessoa física ou fornecedores
-que não dá para identificar só pelo texto da transação.
+- quanto de **combustível está caindo em manutenção**;
+- quanto de **manutenção está fora das contas de manutenção**;
+- quanto do que está em manutenção **não é manutenção**;
+- dentro de cada grupo, **quanto é de cada categoria** (ex.: mão de obra x peças x frete dentro de Manutenção).
 
-## Como funciona
-
-1. **Leitura**: importa o razão contábil (`data/razao.xlsx`, aba `2026`) e a
-   base de referência (`data/Transacoes_base.xlsx`).
-2. **Filtro**: mantém apenas os lançamentos das contas de manutenção de frota.
-3. **Limpeza de texto**: remove acentos, números e caracteres especiais do
-   texto da transação, para melhorar o cruzamento.
-4. **PROCV (merge)**: cruza o texto limpo de cada transação com a base de
-   referência para preencher a classificação `MANUTENCAO` (Sim/Não).
-5. **Regras de palavra-chave**: aplica um dicionário de palavras-chave
-   (`src/config.py`) como camada complementar e prioritária — cobre casos que
-   o PROCV não resolve e permite corrigir exceções sem mexer no código.
-6. **Resumo mensal**: agrega os valores por mês, com totais e percentuais de
-   Manutenção, Não Manutenção e não classificados.
-7. **Exportação**: salva o resultado detalhado em `output/espurgos_2026.xlsx`.
-
-## Estrutura do repositório
-
-```
-classificacao-manutencao-frota/
-├── data/                   # arquivos de entrada (não versionados)
-│   └── .gitkeep
-├── output/                 # arquivos gerados (não versionados)
-│   └── .gitkeep
-├── src/
-│   ├── main.py              # fluxo principal (leitura, limpeza, PROCV, resumo, exportação)
-│   └── config.py            # dicionário de regras de palavra-chave
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
-## Pré-requisitos
-
-- Python 3.10+
-- Bibliotecas listadas em `requirements.txt`
-
-## Instalação
+## Como rodar (todo mês)
 
 ```bash
-git clone https://github.com/<seu-usuario>/classificacao-manutencao-frota.git
-cd classificacao-manutencao-frota
-python -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+python criar_planilha_regras.py          # só na primeira vez: cria config/regras.xlsx
+python analise_mensal.py --competencia 2026-10 --aba 2026
 ```
 
-## Uso
+Entradas padrão (podem ser trocadas por parâmetro, veja `--help`):
 
-1. Coloque os arquivos de entrada em `data/`:
-   - `razao.xlsx` (com a aba `2026`)
-   - `Transacoes_base.xlsx`
-2. Rode o script:
+| Arquivo | Conteúdo |
+|---|---|
+| `data/razao.xlsx` | Razão exportado do sistema (colunas obrigatórias: `DATA_TRANSACAO`, `NOME_CONTA`, `TEXTO_TRANSACAO`, `VALOR_MOEDA`) |
+| `data/Transacoes_base.xlsx` | Base de referência do PROCV (`TRANSACAO`, `MANUTENCAO`, `ATIVIDADE`) — opcional |
+| `config/regras.xlsx` | Premissas e regras (versionada no Git) |
+
+Saída: `output/analise_logistica_AAAA-MM.xlsx`. Sem `--competencia`, usa o último mês do razão.
+
+## Planilha de regras (`config/regras.xlsx`)
+
+Tudo que é premissa fica aqui — **não é preciso mexer no código**.
+
+| Aba | Para que serve |
+|---|---|
+| `PREMISSAS` | Parâmetros gerais: campos de texto usados, prioridades das camadas, exclusões por tipo de lançamento, valor mínimo de pendência, meses no comparativo |
+| `CONTAS` | Contas analisadas → `GRUPO_ATUAL`. `CATEGORIA_PADRAO` (opcional) é usada quando nada mais classificou — ex.: tudo em *Pedágios* é Pedágio. As contas de manutenção ficam **sem** padrão de propósito |
+| `CATEGORIAS` | Cada categoria → `GRUPO_ESPERADO` |
+| `REGRAS` | Palavras-chave → categoria, com `PRIORIDADE` (menor vence), `TIPO_MATCH` e restrição opcional por grupo atual |
+| `EXCECOES` | Classificação manual por texto (e opcionalmente por conta). É onde entram as pessoas físicas já identificadas — vale para todos os meses seguintes |
+| `MAPA_ATIVIDADE` | De-para da coluna `ATIVIDADE` da base PROCV para as categorias |
+| `PESSOA_FISICA` | Listas de NOME / SOBRENOME / EMPRESA para a detecção de PF |
+
+### Camadas de classificação
+
+A primeira camada que reconhecer o lançamento define a categoria:
+
+| Prioridade | Camada | Confiança |
+|---|---|---|
+| 0 | Exceções manuais | Alta |
+| 10–49 | Regras fortes (ajustes contábeis, combustível, multas, pedágio, IPVA, seguros, frete) | Alta |
+| 50 | Base PROCV com `ATIVIDADE` mapeada | Alta |
+| 200–499 | Regras específicas (peças, pneus, mão de obra, lavagem...) e não-logísticas | Média |
+| 500 | Base PROCV só com Sim/Não | Baixa |
+| 800–900 | Regras fracas/genéricas ("placa", "caminhão", "veículo") | Baixa |
+| 990 | Pessoa física detectada → status **Revisar** | Baixa |
+| 995 | Categoria padrão da conta | Baixa |
+
+### Tipos de match
+
+- `palavra` (padrão): palavra/expressão inteira — `MOTOR` não bate em `MOTORISTA`, `CAR` não bate em `RICARDO`.
+- `prefixo`: começo de palavra — `PNEU` bate em `PNEUS`.
+- `contem`: qualquer trecho do texto (comportamento do código antigo).
+- `regex`: expressão regular.
+
+O texto é comparado sem acento e em maiúsculas, **mantendo números** (dá para usar `ARLA 32`, `DIESEL S10`).
+
+## Status
+
+| Status | Significado |
+|---|---|
+| OK | Grupo esperado = grupo da conta |
+| Divergente | Caiu em conta de outro grupo (a coluna `DIVERGENCIA` diz qual) |
+| Revisar | Pessoa física, reembolso, despesas sem detalhe |
+| Não classificado | Nenhuma camada reconheceu |
+| Ajuste contábil | Estorno, provisão, reclassificação etc. |
+
+## Abas do arquivo de saída
+
+`RESUMO` · `MATRIZ_GRUPOS` (grupo atual × esperado) · `MATRIZ_CATEGORIAS` (categoria × grupo atual) ·
+`CATEGORIA_POR_CONTA` · `DIVERGENCIAS` · `PENDENTES` · `COMPARATIVO_STATUS` · `COMPARATIVO_CATEGORIAS` ·
+`BASE_CLASSIFICADA` · `CONFLITOS_BASE` · `ATIVIDADES_BASE` · `CONTAS_FORA_ESCOPO` · `VALIDACAO` · `PREMISSAS_USADAS`
+
+### Ciclo mensal sugerido
+
+1. Rodar a análise do mês.
+2. Conferir `VALIDACAO` (totais batem com o razão? apareceu conta nova em `CONTAS_FORA_ESCOPO`?).
+3. Trabalhar a aba `PENDENTES`: ela já vem agrupada por texto e no mesmo formato da aba `EXCECOES`
+   (`TEXTO`, `NOME_CONTA`, `CATEGORIA`) — preencha a categoria e cole em `EXCECOES`.
+   Para um termo que se repete, prefira criar uma regra em `REGRAS`.
+4. Rodar de novo e analisar `RESUMO`, `MATRIZ_CATEGORIAS` e `DIVERGENCIAS`.
+5. `PREMISSAS_USADAS` registra os parâmetros daquela rodada.
+
+## Estrutura
+
+```
+analise_mensal.py            # ponto de entrada
+criar_planilha_regras.py     # gera o modelo de config/regras.xlsx
+classificacao/
+    texto.py                 # limpeza de texto
+    regras.py                # leitura e validação da planilha de regras
+    classificador.py         # preparação do razão + camadas de classificação + status
+    relatorios.py            # abas de saída e exportação
+config/regras.xlsx
+tests/                       # pytest
+legado/                      # código anterior (Sim/Não de manutenção)
+```
+
+## Testes
 
 ```bash
-python src/main.py
+python -m pytest
 ```
-
-3. O resultado detalhado sai em `output/espurgos_2026.xlsx`, e o resumo
-   mensal (valores e percentuais) é impresso no terminal.
-
-## Ajustando as regras de classificação
-
-As palavras-chave usadas na classificação ficam em `src/config.py`, no
-dicionário `REGRAS_PALAVRA_CHAVE`. Cada entrada é `"palavra": "Sim"` (é
-manutenção) ou `"palavra": "Não"` (não é manutenção). A busca:
-
-- ignora acentos e maiúsculas/minúsculas (o texto já é limpo antes de comparar);
-- é por substring, então `"pecas"` cobre `"AUTO PECAS"`, `"PECAS LTDA"` etc.;
-- por padrão tem **prioridade sobre o PROCV** — ou seja, se uma palavra-chave
-  bater, ela sobrescreve o que veio da base de referência. Isso é útil para
-  tratar exceções conhecidas sem precisar editar a base.
-
-Para adicionar um novo caso, basta incluir uma linha no dicionário — não é
-necessário alterar `main.py`.
 
 ## Dados sensíveis
 
-Os arquivos de entrada e saída contêm informações contábeis internas e
-**não são versionados** (ver `.gitignore`). Ao clonar o repositório, gere ou
-copie seus próprios arquivos para `data/` antes de rodar o script.
+`data/` e `output/` não são versionados (ver `.gitignore`).
