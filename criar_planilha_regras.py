@@ -35,6 +35,7 @@ VERIF = "A verificar"
 
 # ---------------------------------------------------------------------------
 PREMISSAS = [
+    ("ABAS_RAZAO", "2025;2026", "Abas do razão que contêm os lançamentos, separadas por ';'. Todas são juntadas."),
     ("CAMPOS_TEXTO", "TEXTO_TRANSACAO", "Colunas do razão usadas nas regras, separadas por ';' (ex.: TEXTO_TRANSACAO;TEXTO_LOG)."),
     ("GRUPO_MANUTENCAO", MANUT, "Nome do grupo que representa Manutenção (usado nos indicadores)."),
     ("GRUPO_COMBUSTIVEL", COMB, "Nome do grupo que representa Combustível (indicador 'Combustível em Manutenção')."),

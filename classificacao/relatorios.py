@@ -87,7 +87,7 @@ COLUNAS_DETALHE = [
     "NOME_CONTA", "GRUPO_ATUAL", "TEXTO_TRANSACAO", "VALOR_MOEDA", "CATEGORIA", "GRUPO_ESPERADO", "STATUS",
     "DIVERGENCIA", "CONFIANCA", "ORIGEM_CLASSIFICACAO", "REGRA_APLICADA", "POSSIVEL_PF", "BASE_MANUTENCAO",
     "BASE_ATIVIDADE", "CONFLITO_BASE_x_REGRA", "COMBUSTIVEL_EM_MANUTENCAO", "MANUTENCAO_FORA_DA_CONTA",
-    "NAO_MANUTENCAO_EM_MANUTENCAO", "TEXTO_REGRA",
+    "NAO_MANUTENCAO_EM_MANUTENCAO", "TEXTO_REGRA", "ABA_ORIGEM",
 ]
 
 
@@ -191,6 +191,32 @@ def aba_validacao(razao_total: float, razao_qtd: int, todos: pd.DataFrame, fora:
     sem_lanc = regras.contas[~regras.contas["CHAVE_CONTA"].isin(usadas)]["NOME_CONTA"].tolist()
     extra = pd.DataFrame({"ITEM": [f"Conta cadastrada sem nenhum lançamento no razão: {c}" for c in sem_lanc]})
     return pd.concat([df, extra], ignore_index=True)
+
+
+def aba_validacao_abas(todos: pd.DataFrame, fora: pd.DataFrame, excluidos: pd.DataFrame) -> pd.DataFrame:
+    """
+    Por aba do razão: linhas, valor total e meses cobertos. Avisa quando o
+    mesmo mês aparece em mais de uma aba (risco de contar em dobro).
+    """
+    tudo = pd.concat([todos, fora, excluidos], ignore_index=True)
+    if "ABA_ORIGEM" not in tudo.columns:
+        return pd.DataFrame()
+    tudo["_VALOR_CADASTRADAS"] = tudo["VALOR_MOEDA"].where(tudo["GRUPO_ATUAL"].notna(), 0)
+    g = tudo.groupby("ABA_ORIGEM").agg(
+        QTD_LINHAS=("VALOR_MOEDA", "size"),
+        VALOR_TOTAL=("VALOR_MOEDA", "sum"),
+        VALOR_CONTAS_CADASTRADAS=("_VALOR_CADASTRADAS", "sum"),
+        PRIMEIRO_MES=("MES", "min"),
+        ULTIMO_MES=("MES", "max"),
+    ).reset_index()
+
+    abas_por_mes = tudo.dropna(subset=["MES"]).groupby("MES")["ABA_ORIGEM"].agg(lambda s: sorted(set(s)))
+    repetidos = abas_por_mes[abas_por_mes.map(len) > 1]
+    g["AVISO"] = ""
+    if len(repetidos):
+        meses = ", ".join(f"{m} ({' e '.join(a)})" for m, a in repetidos.items())
+        g.loc[0, "AVISO"] = f"ATENÇÃO: mês presente em mais de uma aba, confira se não há duplicidade: {meses}"
+    return g
 
 
 def aba_contas_fora(fora: pd.DataFrame) -> pd.DataFrame:

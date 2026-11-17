@@ -23,11 +23,35 @@ def parse_args(argv=None):
     p = argparse.ArgumentParser(description="Classificação de naturezas logísticas do razão de despesas.")
     p.add_argument("--competencia", help="Mês analisado no formato AAAA-MM. Padrão: último mês presente no razão.")
     p.add_argument("--razao", default="data/razao.xlsx", help="Arquivo do razão (padrão: data/razao.xlsx)")
-    p.add_argument("--aba", default=None, help="Aba do razão (padrão: primeira aba)")
+    p.add_argument("--aba", default=None,
+                   help="Abas do razão separadas por ';' (ex.: 2025;2026). Padrão: premissa ABAS_RAZAO")
     p.add_argument("--base", default="data/Transacoes_base.xlsx", help="Base de referência do PROCV")
     p.add_argument("--regras", default="config/regras.xlsx", help="Planilha de regras e premissas")
     p.add_argument("--saida", default="output", help="Pasta de saída")
     return p.parse_args(argv)
+
+
+def le_razao(caminho, abas: list[str]):
+    """
+    Lê e junta as abas do razão (ex.: 2025 e 2026). Cada linha ganha a
+    coluna ABA_ORIGEM.
+    """
+    print(f"Lendo razão: {caminho}")
+    with pd.ExcelFile(caminho) as xls:
+        disponiveis = [str(n) for n in xls.sheet_names]
+        if not abas:
+            abas = [disponiveis[0]]
+        faltando = [a for a in abas if a not in disponiveis]
+        if faltando:
+            raise ValueError(f"Aba(s) {faltando} não existem no razão. Abas disponíveis: {disponiveis}")
+        partes = []
+        for aba in abas:
+            df = pd.read_excel(xls, sheet_name=aba)
+            df.columns = [str(c).strip() for c in df.columns]
+            df["ABA_ORIGEM"] = aba
+            print(f"  aba {aba}: {len(df):,} linhas")
+            partes.append(df)
+    return pd.concat(partes, ignore_index=True)
 
 
 def main(argv=None):
@@ -39,8 +63,12 @@ def main(argv=None):
         print(f"ERRO na planilha de regras ({args.regras}):\n{e}")
         return 1
 
-    print(f"Lendo razão: {args.razao}")
-    razao = pd.read_excel(args.razao, sheet_name=args.aba if args.aba is not None else 0)
+    abas_razao = [a.strip() for a in args.aba.split(";") if a.strip()] if args.aba else regras.premissa_lista("ABAS_RAZAO")
+    try:
+        razao = le_razao(args.razao, abas_razao)
+    except ValueError as e:
+        print(f"ERRO: {e}")
+        return 1
     razao_qtd = len(razao)
 
     base = None
@@ -85,7 +113,10 @@ def main(argv=None):
         "CONFLITOS_BASE": conflitos_base,
         "ATIVIDADES_BASE": rel.aba_atividades_base(base_lookup, regras),
         "CONTAS_FORA_ESCOPO": rel.aba_contas_fora(fora),
-        "VALIDACAO": rel.aba_validacao(razao_total, razao_qtd, todos, fora, excluidos, mes, regras, competencia),
+        "VALIDACAO": [
+            ("Totais", rel.aba_validacao(razao_total, razao_qtd, todos, fora, excluidos, mes, regras, competencia)),
+            ("Abas do razão lidas", rel.aba_validacao_abas(todos, fora, excluidos)),
+        ],
         "PREMISSAS_USADAS": premissas_usadas,
     }
 

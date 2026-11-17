@@ -15,14 +15,14 @@ onde o lançamento caiu). Assim a análise mensal responde:
 ```bash
 pip install -r requirements.txt
 python criar_planilha_regras.py          # só na primeira vez: cria config/regras.xlsx
-python analise_mensal.py --competencia 2026-10 --aba 2026
+python analise_mensal.py --competencia 2026-10
 ```
 
 Entradas padrão (podem ser trocadas por parâmetro, veja `--help`):
 
 | Arquivo | Conteúdo |
 |---|---|
-| `data/razao.xlsx` | Razão exportado do sistema (colunas obrigatórias: `DATA_TRANSACAO`, `NOME_CONTA`, `TEXTO_TRANSACAO`, `VALOR_MOEDA`) |
+| `data/razao.xlsx` | Razão exportado do sistema. São lidas e juntadas as abas da premissa `ABAS_RAZAO` (padrão `2025;2026`); as demais abas são ignoradas. Colunas obrigatórias: `DATA_TRANSACAO`, `NOME_CONTA`, `TEXTO_TRANSACAO`, `VALOR_MOEDA` |
 | `data/Transacoes_base.xlsx` | Base de referência do PROCV (`TRANSACAO`, `MANUTENCAO`, `ATIVIDADE`) — opcional |
 | `config/regras.xlsx` | Premissas e regras (versionada no Git) |
 
@@ -34,7 +34,7 @@ Tudo que é premissa fica aqui — **não é preciso mexer no código**.
 
 | Aba | Para que serve |
 |---|---|
-| `PREMISSAS` | Parâmetros gerais: campos de texto usados, prioridades das camadas, exclusões por tipo de lançamento, valor mínimo de pendência, meses no comparativo |
+| `PREMISSAS` | Parâmetros gerais: abas do razão (`ABAS_RAZAO`), campos de texto usados, prioridades das camadas, exclusões por tipo de lançamento, valor mínimo de pendência, meses no comparativo |
 | `CONTAS` | Contas analisadas → `GRUPO_ATUAL`. `CATEGORIA_PADRAO` (opcional) é usada quando nada mais classificou — ex.: tudo em *Pedágios* é Pedágio. As contas de manutenção ficam **sem** padrão de propósito |
 | `CATEGORIAS` | Cada categoria → `GRUPO_ESPERADO` |
 | `REGRAS` | Palavras-chave → categoria, com `PRIORIDADE` (menor vence), `TIPO_MATCH` e restrição opcional por grupo atual |
@@ -85,7 +85,8 @@ O texto é comparado sem acento e em maiúsculas, **mantendo números** (dá par
 ### Ciclo mensal sugerido
 
 1. Rodar a análise do mês.
-2. Conferir `VALIDACAO` (totais batem com o razão? apareceu conta nova em `CONTAS_FORA_ESCOPO`?).
+2. Conferir `VALIDACAO` (totais por aba batem com o razão? algum mês aparece em duas abas? apareceu conta nova em `CONTAS_FORA_ESCOPO`?).
+   Quando o ano virar, basta acrescentar a nova aba em `ABAS_RAZAO` (ex.: `2025;2026;2027`).
 3. Trabalhar a aba `PENDENTES`: ela já vem agrupada por texto e no mesmo formato da aba `EXCECOES`
    (`TEXTO`, `NOME_CONTA`, `CATEGORIA`) — preencha a categoria e cole em `EXCECOES`.
    Para um termo que se repete, prefira criar uma regra em `REGRAS`.

@@ -35,6 +35,7 @@ ABAS_OBRIGATORIAS = {
 }
 
 PREMISSAS_PADRAO = {
+    "ABAS_RAZAO": "2025;2026",
     "CAMPOS_TEXTO": "TEXTO_TRANSACAO",
     "GRUPO_MANUTENCAO": "Manutenção",
     "GRUPO_COMBUSTIVEL": "Combustíveis e Lubrificantes",

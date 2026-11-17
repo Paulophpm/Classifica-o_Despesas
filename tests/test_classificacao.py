@@ -120,6 +120,7 @@ def test_fluxo_completo_gera_excel(tmp_path):
     rc = analise_mensal.main([
         "--razao", str(tmp_path / "razao.xlsx"), "--regras", str(tmp_path / "regras.xlsx"),
         "--base", str(tmp_path / "nao_existe.xlsx"), "--saida", str(tmp_path / "out"), "--competencia", "2026-10",
+        "--aba", "Sheet1",
     ])
     assert rc == 0
     saida = pd.read_excel(tmp_path / "out" / "analise_logistica_2026-10.xlsx", sheet_name=None)
@@ -147,3 +148,22 @@ def test_planilha_com_erro_avisa_claramente(tmp_path):
 def test_regras_especificas(tmp_path, texto, categoria):
     df, _ = _classifica(tmp_path, [("2026-10-05", "Pecas e Acessorios", texto, 10)])
     assert df.loc[texto, "CATEGORIA"] == categoria
+
+
+def test_le_duas_abas_e_compara_entre_anos(tmp_path):
+    exporta_excel(tmp_path / "regras.xlsx", monta_abas())
+    with pd.ExcelWriter(tmp_path / "razao.xlsx") as w:
+        pd.DataFrame({"x": [1]}).to_excel(w, sheet_name="Resumo", index=False)  # aba que deve ser ignorada
+        _razao([("2025-12-10", "Pecas e Acessorios", "PNEU 295", 100)]).to_excel(w, sheet_name="2025", index=False)
+        _razao([("2026-01-10", "Pecas e Acessorios", "PNEU 295", 150)]).to_excel(w, sheet_name="2026", index=False)
+
+    args = ["--razao", str(tmp_path / "razao.xlsx"), "--regras", str(tmp_path / "regras.xlsx"),
+            "--base", "", "--saida", str(tmp_path / "out"), "--competencia", "2026-01"]
+    assert analise_mensal.main(args) == 0
+    saida = pd.read_excel(tmp_path / "out" / "analise_logistica_2026-01.xlsx", sheet_name=None)
+    comp = saida["COMPARATIVO_CATEGORIAS"]
+    assert {"2025-12", "2026-01"} <= set(comp.columns)
+    assert comp.loc[comp["CATEGORIA"] == "Pneus", "VARIACAO_MES_ANTERIOR"].iloc[0] == 50
+
+    # aba inexistente gera erro claro
+    assert analise_mensal.main(args + ["--aba", "2024"]) == 1
