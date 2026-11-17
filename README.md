@@ -22,11 +22,24 @@ Entradas padrão (podem ser trocadas por parâmetro, veja `--help`):
 
 | Arquivo | Conteúdo |
 |---|---|
-| `data/razao.xlsx` | Razão exportado do sistema. São lidas e juntadas as abas da premissa `ABAS_RAZAO` (padrão `2025;2026`); as demais abas são ignoradas. Colunas obrigatórias: `DATA_TRANSACAO`, `NOME_CONTA`, `TEXTO_TRANSACAO`, `VALOR_MOEDA` |
+| `data/razao.xlsx` | Razão exportado do sistema. É lida a aba da premissa `ABAS_RAZAO` (padrão `2026`); as demais abas são ignoradas. Colunas obrigatórias: `DATA_TRANSACAO`, `NOME_CONTA`, `TEXTO_TRANSACAO`, `VALOR_MOEDA` |
 | `data/Transacoes_base.xlsx` | Base de referência do PROCV (`TRANSACAO`, `MANUTENCAO`, `ATIVIDADE`) — opcional |
 | `config/regras.xlsx` | Premissas e regras (versionada no Git) |
 
 Saída: `output/analise_logistica_AAAA-MM.xlsx`. Sem `--competencia`, usa o último mês do razão.
+
+### Escolhendo o ano (aba do razão)
+
+O padrão é analisar só a aba **2026** (premissa `ABAS_RAZAO` na planilha de regras). Para outra análise,
+troque na hora com `--aba`, sem mexer na planilha:
+
+```bash
+python analise_mensal.py --aba 2025 --competencia 2025-10        # só 2025
+python analise_mensal.py --aba "2025;2026" --competencia 2026-01  # juntando os anos (comparativo atravessa a virada)
+python analise_mensal.py --aba 2027                               # quando existir a aba 2027
+```
+
+Para mudar o padrão de vez (ex.: em 2027), altere `ABAS_RAZAO` na aba `PREMISSAS`.
 
 ## Planilha de regras (`config/regras.xlsx`)
 
@@ -86,7 +99,6 @@ O texto é comparado sem acento e em maiúsculas, **mantendo números** (dá par
 
 1. Rodar a análise do mês.
 2. Conferir `VALIDACAO` (totais por aba batem com o razão? algum mês aparece em duas abas? apareceu conta nova em `CONTAS_FORA_ESCOPO`?).
-   Quando o ano virar, basta acrescentar a nova aba em `ABAS_RAZAO` (ex.: `2025;2026;2027`).
 3. Trabalhar a aba `PENDENTES`: ela já vem agrupada por texto e no mesmo formato da aba `EXCECOES`
    (`TEXTO`, `NOME_CONTA`, `CATEGORIA`) — preencha a categoria e cole em `EXCECOES`.
    Para um termo que se repete, prefira criar uma regra em `REGRAS`.

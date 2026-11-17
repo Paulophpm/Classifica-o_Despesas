@@ -24,7 +24,7 @@ def parse_args(argv=None):
     p.add_argument("--competencia", help="Mês analisado no formato AAAA-MM. Padrão: último mês presente no razão.")
     p.add_argument("--razao", default="data/razao.xlsx", help="Arquivo do razão (padrão: data/razao.xlsx)")
     p.add_argument("--aba", default=None,
-                   help="Abas do razão separadas por ';' (ex.: 2025;2026). Padrão: premissa ABAS_RAZAO")
+                   help="Aba(s) do razão a analisar, ex.: 2025 ou \"2025;2026\". Padrão: premissa ABAS_RAZAO (2026)")
     p.add_argument("--base", default="data/Transacoes_base.xlsx", help="Base de referência do PROCV")
     p.add_argument("--regras", default="config/regras.xlsx", help="Planilha de regras e premissas")
     p.add_argument("--saida", default="output", help="Pasta de saída")

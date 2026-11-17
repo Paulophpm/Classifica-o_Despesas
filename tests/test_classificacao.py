@@ -159,7 +159,19 @@ def test_le_duas_abas_e_compara_entre_anos(tmp_path):
 
     args = ["--razao", str(tmp_path / "razao.xlsx"), "--regras", str(tmp_path / "regras.xlsx"),
             "--base", "", "--saida", str(tmp_path / "out"), "--competencia", "2026-01"]
+
+    # padrão: só a aba 2026
     assert analise_mensal.main(args) == 0
+    saida = pd.read_excel(tmp_path / "out" / "analise_logistica_2026-01.xlsx", sheet_name=None)
+    assert set(saida["BASE_CLASSIFICADA"]["ABA_ORIGEM"].astype(str)) == {"2026"}
+    assert "2025-12" not in saida["COMPARATIVO_CATEGORIAS"].columns
+
+    # só 2025
+    assert analise_mensal.main(args[:-1] + ["2025-12", "--aba", "2025"]) == 0
+    assert (tmp_path / "out" / "analise_logistica_2025-12.xlsx").exists()
+
+    # 2025 e 2026 juntos
+    assert analise_mensal.main(args + ["--aba", "2025;2026"]) == 0
     saida = pd.read_excel(tmp_path / "out" / "analise_logistica_2026-01.xlsx", sheet_name=None)
     comp = saida["COMPARATIVO_CATEGORIAS"]
     assert {"2025-12", "2026-01"} <= set(comp.columns)
